@@ -52,7 +52,7 @@ def handle_request(request: dict) -> dict | None:
                 },
                 "serverInfo": {
                     "name": "telegram-agent-approver-mcp",
-                    "version": "1.1.0"
+                    "version": "1.2.0"
                 }
             }
         }
@@ -88,19 +88,31 @@ def handle_request(request: dict) -> dict | None:
                 )
 
                 if status == "APPROVED":
-                    result_text = "✅ 用户已在手机端【批准】此操作。"
+                    result_text = "✅ 用户已在手机 Telegram 端【批准】此操作。请继续按计划执行。"
                     is_error = False
                 elif status == "HOLD":
-                    result_text = "⏸️ 用户已在手机端选择【Hold 挂起】。请停止自动重试，保留当前任务上下文，等待用户回到电脑前在 IDE 中手动接管。"
-                    is_error = True
+                    result_text = (
+                        "🛑 [强制暂停指令] 用户已在手机端选择了【Hold (等回电脑)】。\n"
+                        "⚠️ 严禁行为：你绝对不能再调用任何工具，不能尝试自动修复，不能执行命令，也不能修改文件！\n"
+                        "📌 正确操作：你必须立刻终止调用工具，向用户输出一句 short message 说明“任务已按手机 Hold 要求暂停，等待用户回到电脑前手动接管”，然后结束当前 Turn。"
+                    )
+                    is_error = False
                 elif status == "FEEDBACK":
-                    result_text = f"💬 用户已在手机 Telegram 端回复了下一步修改指令: '{feedback}'。请严格遵循此指示调整并继续下一步。"
+                    result_text = (
+                        f"💬 用户在手机 Telegram 端提交了下一阶段指示: '{feedback}'。\n"
+                        f"📌 请严格遵循用户的这条手机反馈指示进行下一步操作。"
+                    )
                     is_error = False
                 elif status == "REJECTED":
-                    result_text = "❌ 用户已在手机端【拒绝】此操作。"
+                    result_text = (
+                        "🛑 [拒绝指令] 用户已在手机 Telegram 端【拒绝】此操作。\n"
+                        "⚠️ 请放弃执行该操作，不要强制重试。"
+                    )
                     is_error = True
                 else:  # TIMEOUT
-                    result_text = f"⚠️ 审批在 {timeout_seconds} 秒 (5分钟) 内未收到手机端响应，已自动超时拒绝。"
+                    result_text = (
+                        f"⚠️ 审批在 {timeout_seconds} 秒 (5分钟) 内未收到手机端响应，已自动超时拒绝。"
+                    )
                     is_error = True
 
                 return {
