@@ -13,7 +13,7 @@ logger.addHandler(handler)
 TOOLS = [
     {
         "name": "request_mobile_approval",
-        "description": "向用户的手机 Telegram 发送交互式审批请求卡片（带【批准】和【拒绝】按钮），并挂起等待用户在手机上点击选择。适用于运行高风险指令、文件修改或 Plan 审阅时使用。",
+        "description": "向用户的手机 Telegram 发送交互式审批请求卡片（带【批准】、【拒绝】、【Hold 挂起】及【补充修改指令】按键），并挂起等待用户在手机上选择或输入。适用于运行高风险指令、文件修改或 Plan 审阅时使用。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -27,7 +27,7 @@ TOOLS = [
                 },
                 "timeout_seconds": {
                     "type": "integer",
-                    "description": "手机端响应超时时间（单位：秒，默认 300 秒）",
+                    "description": "手机端响应超时时间（单位：秒，默认 300 秒 / 5 分钟）",
                     "default": 300
                 }
             },
@@ -52,7 +52,7 @@ def handle_request(request: dict) -> dict | None:
                 },
                 "serverInfo": {
                     "name": "telegram-agent-approver-mcp",
-                    "version": "1.0.0"
+                    "version": "1.1.0"
                 }
             }
         }
@@ -81,9 +81,28 @@ def handle_request(request: dict) -> dict | None:
 
             try:
                 approver = TelegramApprover()
-                approved = approver.request_approval(title=title, details=details, timeout_seconds=timeout_seconds)
+                status, feedback = approver.request_approval(
+                    title=title,
+                    details=details,
+                    timeout_seconds=timeout_seconds
+                )
 
-                status_msg = "✅ 用户已在手机端【批准】此操作。" if approved else "❌ 用户已在手机端【拒绝】此操作（或响应超时）。"
+                if status == "APPROVED":
+                    result_text = "✅ 用户已在手机端【批准】此操作。"
+                    is_error = False
+                elif status == "HOLD":
+                    result_text = "⏸️ 用户已在手机端选择【Hold 挂起】。请停止自动重试，保留当前任务上下文，等待用户回到电脑前在 IDE 中手动接管。"
+                    is_error = True
+                elif status == "FEEDBACK":
+                    result_text = f"💬 用户已在手机 Telegram 端回复了下一步修改指令: '{feedback}'。请严格遵循此指示调整并继续下一步。"
+                    is_error = False
+                elif status == "REJECTED":
+                    result_text = "❌ 用户已在手机端【拒绝】此操作。"
+                    is_error = True
+                else:  # TIMEOUT
+                    result_text = f"⚠️ 审批在 {timeout_seconds} 秒 (5分钟) 内未收到手机端响应，已自动超时拒绝。"
+                    is_error = True
+
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -91,10 +110,10 @@ def handle_request(request: dict) -> dict | None:
                         "content": [
                             {
                                 "type": "text",
-                                "text": status_msg
+                                "text": result_text
                             }
                         ],
-                        "isError": not approved
+                        "isError": is_error
                     }
                 }
             except Exception as e:  # noqa: BLE001
