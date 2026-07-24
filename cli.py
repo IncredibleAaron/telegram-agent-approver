@@ -1,7 +1,12 @@
 import argparse
+import io
 import sys
 
 from telegram_approver import TelegramApprover
+
+# UTF-8 兼容支持 (防止 Windows 控制台 GBK 编码报错)
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 
 def main():
